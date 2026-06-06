@@ -6,9 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "server": "node server.js",
-    "client": "cmd.exe /c \"npm run dev --prefix client\"",
+    "client": "npm run dev --prefix client",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "build": "cmd.exe /c \"npm run build --prefix client\""
+    "build": "npm install --prefix client && npm run build --prefix client"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
