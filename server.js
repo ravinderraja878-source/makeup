@@ -17,7 +17,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'alchemist_makeup_artistry_secret_k
 app.use(cors());
 app.use(express.json());
 
-// Initialize Directories
+// Initialize Local Directories (Fallback for local/legacy operations)
 const uploadsDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -26,21 +26,12 @@ if (!fs.existsSync(uploadsDir)) {
 // Serve Static Uploads
 app.use('/uploads', express.static(uploadsDir));
 
-// Also serve client assets if they exist (bridging for local/dev assets if needed)
+// Serve Static Assets
 app.use('/assets', express.static(path.join(__dirname, 'client', 'public', 'assets')));
 app.use('/assets', express.static(path.join(__dirname, 'public', 'assets')));
 
-// Multer Config for Gallery Uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
+// Multer Config: Use memory storage for serverless-ready stateless operations
+const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   fileFilter: (req, file, cb) => {
@@ -53,7 +44,7 @@ const upload = multer({
       cb(new Error('Only images and video files are allowed.'));
     }
   },
-  limits: { fileSize: 50 * 1024 * 1024 } // 50MB max limit
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB max limit
 });
 
 // Middleware: Authenticate Token
@@ -318,7 +309,7 @@ app.get('/api/gallery', async (req, res) => {
   }
 });
 
-// Add Gallery Item (Admin Only - Supports File Upload)
+// Add Gallery Item (Admin Only - Supports Memory File base64 conversion)
 app.post('/api/gallery', requireAdmin, upload.single('mediaFile'), async (req, res) => {
   const { title, description, type } = req.body;
   if (!title || !type) {
@@ -328,12 +319,13 @@ app.post('/api/gallery', requireAdmin, upload.single('mediaFile'), async (req, r
   let fileUrl = req.body.url; // Support external URL if provided
 
   if (req.file) {
-    // Save as local uploads path
-    fileUrl = `/uploads/${req.file.filename}`;
+    // Convert Buffer directly to base64 Data URI
+    const base64Data = req.file.buffer.toString('base64');
+    fileUrl = `data:${req.file.mimetype};base64,${base64Data}`;
   }
 
   if (!fileUrl) {
-    return res.status(400).json({ message: 'A uploaded file or external media URL is required.' });
+    return res.status(400).json({ message: 'An uploaded file or external media URL is required.' });
   }
 
   try {
@@ -357,7 +349,7 @@ app.delete('/api/gallery/:id', requireAdmin, async (req, res) => {
       return res.status(404).json({ message: 'Gallery item not found.' });
     }
 
-    // If local file, delete it from filesystem
+    // Fallback deletion for old disk upload URLs
     if (item.url.startsWith('/uploads/')) {
       const fileName = item.url.replace('/uploads/', '');
       const filePath = path.join(uploadsDir, fileName);

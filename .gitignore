@@ -9,6 +9,9 @@ dist/
 # Local database
 database.sqlite
 
+# Local uploaded files (multer)
+public/uploads/
+
 # Environment variables
 .env
 
